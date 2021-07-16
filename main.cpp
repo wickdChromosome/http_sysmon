@@ -1,10 +1,209 @@
 #include <iostream>
+#include <algorithm>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
 #include <sqlite3.h>
-#include <unordered_set>
 #include <nlohmann/json.hpp>
+
+
+// SQLITE HELPER FUNCTIONS
+//#############################################################################
+
+class SqliteCallback {
+
+
+	public:
+
+	/*
+	 * Callback function for sqlite select 
+	 */
+	static int select_callback(void *data, int argc, char **argv, char **azColName) {
+
+		std::unordered_multimap<std::string,std::string>* results = 
+			reinterpret_cast<std::unordered_multimap<std::string,std::string>*>(data);
+
+		int i;
+		fprintf(stderr, "%s: ", (const char*)data);
+
+		for(i = 0; i<argc; i++){
+
+			std::string coln = azColName[i];
+			std::string argn = argv[i];	
+			(*results).insert({ {coln,argn} });	
+
+		}
+
+		return 0;
+	}
+
+	/*
+	 * Callback function for sqlite select 
+	 */
+	static int callback(void *data, int argc, char **argv, char **azColName){
+		int i;
+		fprintf(stderr, "%s: ", (const char*)data);
+
+		for(i = 0; i<argc; i++){
+		       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+		}
+
+		printf("\n");
+		return 0;
+	}
+};
+
+/*
+ * Generic helper for executing select sqlite commands
+ *
+ */
+bool sqlite_select_exec(std::unordered_multimap<std::string,std::string>* results , std::string& command) {
+
+	sqlite3 *db;
+	char *zErrMsg = 0;
+	int rc;
+	bool status = false;
+
+	rc = sqlite3_open("test.db", &db);
+
+	if( rc ) {
+	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+	return false;
+	} 
+
+	SqliteCallback sqlite_callback;
+
+	/* Execute SQL statement */
+	rc = sqlite3_exec(db, command.c_str(), sqlite_callback.select_callback,results , &zErrMsg);
+
+	if( rc != SQLITE_OK ){
+	status = false;
+	//fprintf(stderr, "SQL error: %s\n", zErrMsg);
+	sqlite3_free(zErrMsg);
+
+	} else {
+	status = true;
+	// fprintf(stdout, "Records created successfully\n");
+	}
+	sqlite3_close(db);
+
+	// To disable warning
+	return status;
+
+}
+
+
+
+/*
+ * Generic helper for executing sqlite commands
+ *
+ */
+bool sqlite_exec(std::string& command) {
+
+	bool status;
+	sqlite3 *db;
+	char *zErrMsg = 0;
+	int rc;
+
+	rc = sqlite3_open("test.db", &db);
+
+	if( rc ) {
+	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+	return false;
+	} 
+
+	SqliteCallback common_callback;
+
+	/* Execute SQL statement */
+	rc = sqlite3_exec(db, command.c_str(), common_callback.callback, 0, &zErrMsg);
+
+	if( rc != SQLITE_OK ){
+		fprintf(stderr, "SQL error: %s\n", zErrMsg);
+		sqlite3_free(zErrMsg);
+		status = false;
+
+	} else {
+		fprintf(stdout, "Records created successfully\n");
+		status = true;
+	}
+	sqlite3_close(db);
+
+	return status;
+}
+
+
+
+/*
+ * Gets a list of tables from the database
+ *
+ */
+bool list_tables(std::vector<std::string>& tables) {
+
+	std::string command = "SELECT name FROM sqlite_schema WHERE type='table' ORDER by name";
+	std::unordered_multimap<std::string,std::string>* results = new std::unordered_multimap<std::string,std::string>;	
+	if (sqlite_select_exec( results, command) == true) { 
+
+
+		std::unordered_multimap<std::string,std::string> results_deref = *results;
+
+		for (auto itr = results_deref.begin(); itr != results_deref.end(); itr++)   
+			tables.push_back(itr->second);
+
+		delete results;
+
+	} else return false;
+
+	// to disable warning
+	return false;
+}
+
+
+
+
+/* 
+ * Checks if that session ID is already registered in DB
+ */
+bool is_session_already_present(std::string session_token) {
+
+	std::vector<std::string> tables = {};
+
+	// This is just a string with a list of registered sessions 
+	list_tables(tables);
+	if ( std::find(tables.begin(), tables.end(), session_token) == tables.end() ) {
+
+		// hostname not already present
+		return false;
+
+	} else return true;
+
+
+
+
+}
+
+/* 
+* Add a new session table
+*
+*/
+
+bool create_table(std::string& session_token) {
+
+       std::string command = "CREATE TABLE '" + session_token + "'("  \
+     "ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL," \
+     "HOSTNAME TEXT NOT NULL," \
+     "RAM_PERC FLOAT NOT NULL," \
+     "UNIX_TIME INT NOT NULL," \
+     "LOAD_AVG FLOAT NOT NULL);";
+
+     if (sqlite_exec(command) == true) {
+
+     	return true; 
+
+     } else return false;
+
+
+}
+
 
 // RANDOM HELPERS
 //#############################################################################
@@ -26,6 +225,20 @@ void ConvertToJson(std::vector<std::string>& in_set,
 
 
 }
+
+void ConvertMmapToJson(std::unordered_multimap<std::string,std::string>& in_map,
+		nlohmann::json& jsonobj) {
+
+	for(auto& element : in_map) {
+		
+		jsonobj[element.first].push_back(element.second);
+
+	}
+
+
+}
+
+
 
 /*
  * For generating a random access token, taken from
@@ -54,7 +267,7 @@ std::string random_string( size_t length ) {
  * web interface and to publish data
  */
 
-void generate_session_id(std::string& token_placeholder) {
+void generate_session_token(std::string& token_placeholder) {
 
 	// Set it to true to keep going until we can find
 	// a string that doesn't exist yet
@@ -63,10 +276,10 @@ void generate_session_id(std::string& token_placeholder) {
 	while(token_already_exists) {
 	
 		// Generate a token
-		std::string access_token = random_string(256);
+		std::string access_token = random_string(32);
 
 		// If this session ID doesn't exist yet, give it to the user
-		if (is_token_in_db(access_token) == false) {
+		if (is_session_already_present(access_token) == false) {
 		
 			token_placeholder = access_token;
 			token_already_exists = false;
@@ -78,172 +291,6 @@ void generate_session_id(std::string& token_placeholder) {
 
 }
 
-// SQLITE HELPER FUNCTIONS
-//#############################################################################
-
-/*
- * Callback function for sqlite select 
- */
-static int sqlite_select_callback(void *data, int argc, char **argv, char **azColName) {
-
-	int i;
-	fprintf(stderr, "%s: ", (const char*)data);
-
-	for(i = 0; i<argc; i++){
-
-				
-		printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-	}
-
-	printf("\n");
-	return 0;
-}
-
-/*
- * Callback function for sqlite select 
- */
-static int callback(void *data, int argc, char **argv, char **azColName){
-	int i;
-	fprintf(stderr, "%s: ", (const char*)data);
-
-	for(i = 0; i<argc; i++){
-	       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-	}
-
-	printf("\n");
-	return 0;
-}
-
-
-/*
- * Generic helper for executing select sqlite commands
- *
- */
-void sqlite_select_exec( std::vector<std::string> results, std::string& command) {
-
-	sqlite3 *db;
-	char *zErrMsg = 0;
-	int rc;
-
-	rc = sqlite3_open("test.db", &db);
-
-	if( rc ) {
-	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-	return;
-	} 
-
-	/* Execute SQL statement */
-	rc = sqlite3_exec(db, command.c_str(), sqlite_select_callback,0 , &zErrMsg);
-
-	if( rc != SQLITE_OK ){
-	fprintf(stderr, "SQL error: %s\n", zErrMsg);
-	sqlite3_free(zErrMsg);
-	} else {
-	fprintf(stdout, "Records created successfully\n");
-	}
-	sqlite3_close(db);
-
-
-}
-
-
-
-/*
- * Generic helper for executing sqlite commands
- *
- */
-void sqlite_exec(std::string& command) {
-
-	sqlite3 *db;
-	char *zErrMsg = 0;
-	int rc;
-
-	rc = sqlite3_open("test.db", &db);
-
-	if( rc ) {
-	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-	return;
-	} 
-
-
-
-	/* Execute SQL statement */
-	rc = sqlite3_exec(db, command.c_str(), callback, 0, &zErrMsg);
-
-	if( rc != SQLITE_OK ){
-	fprintf(stderr, "SQL error: %s\n", zErrMsg);
-	sqlite3_free(zErrMsg);
-	} else {
-	fprintf(stdout, "Records created successfully\n");
-	}
-	sqlite3_close(db);
-
-
-}
-
-
-
-/*
- * Gets a list of tables from the database
- *
- */
-void list_tables(std::vector<std::string>& tables, std::string& session_token) {
-
-
-	std::string command = "SELECT name FROM sqlite_schema WHERE type='table' ORDER by name";
-	sqlite_select_exec( tables, command);
-
-
-}
-
-
-
-
-/* 
- * Checks if that session ID is already registered in DB
- */
-bool is_session_already_present(std::string session_token) {
-
-	std::vector<std::string> tables = {};
-
-	// This is just an unordered map with a list of registered hosts 
-	list_tables(tables, session_token);
-	std::vector<std::string>::const_iterator got = find(tables.begin(), tables.end(), session_token);
-
-	if ( got == tables.end() ) {
-		// hostname already present
-		return true;
-
-	} else return false;
-
-
-
-
-}
-
-/* 
-* Add a new session table
-*
-*/
-
-void create_table(std::string& session_token) {
-
-       std::cout << "Creating table\n";
-
-       std::string command = "CREATE TABLE " + session_token + "("  \
-     "ID INT PRIMARY KEY AUTOINCREMENT NOT NULL," \
-     "LABEL TEXT NOT NULL," \
-     "RAM_PERC INT NOT NULL," \
-     "LOAD_AVG FLOAT NOT NULL);";
-
-     sqlite_exec(command);
-
-
-}
-
-
-
-
 // MAIN WEBSITE FUNCTIONS
 //#############################################################################
 
@@ -253,15 +300,17 @@ void create_table(std::string& session_token) {
  * Adds a new session table
  * 
  */
-
-void session_init(std::string& session_token) {
-
-	std::cout << "Checking if session already exists\n";
+bool session_init(std::string& session_token) {
 
 	if (is_session_already_present(session_token) == false) {
-		create_table(session_token);
-	} else return;
+		
+		if (create_table(session_token) == true) {
+			return true;
+		}
+	} else return false;
 
+	// To disable warning
+	return false;
 }
 
 
@@ -270,10 +319,70 @@ void session_init(std::string& session_token) {
  */
 void list_hosts(std::vector<std::string>& hosts, std::string& session_token) {
 	
-	hosts = {"host1","host2"};
-		
-		
-		
+	std::string command = "SELECT DISTINCT HOSTNAME FROM " + session_token;
+	std::unordered_multimap<std::string,std::string>* results = new std::unordered_multimap<std::string,std::string>;	
+	sqlite_select_exec( results, command);
+	std::unordered_multimap<std::string,std::string> results_deref = *results;
+
+	// Now fill the vector to be returned
+	for (auto& result: results_deref) {
+
+		hosts.push_back(result.second);
+
+	}
+
+	delete results;
+
+
+
+}
+
+
+
+/*
+ * Fetches the latest data from the db for a requested machine
+ *
+ */
+
+bool fetch_latest(std::unordered_multimap<std::string,std::string>* results, std::string& session_token, std::string& hostname) {
+
+	std::string command = "SELECT * FROM '" + session_token + "' WHERE HOSTNAME='" + hostname + "' LIMIT 1;";
+	results = new std::unordered_multimap<std::string,std::string>;	
+	
+	if (sqlite_select_exec( results, command) == true) {
+	
+		return true;
+
+
+
+	} else return false;
+
+}
+
+/*
+ * Insert new data for this session
+ *
+ */
+
+bool insert_entry(std::string& session_token,
+	       	std::string& hostname,
+		std::string& unixtime,
+		std::string& loadavg,
+		std::string& ramperc) {
+
+	std::string command = "INSERT INTO '" + session_token + "' ( UNIX_TIME , LOAD_AVG , RAM_PERC , HOSTNAME ) VALUES" +
+	      			"( '" + unixtime + "' , '"
+				    + loadavg + "' , '"
+				    + ramperc + "' , '"  
+				    + hostname + "' ); "; 
+
+	if ( sqlite_exec( command ) == true ) {
+	
+		return true;			
+	
+	} else return false;
+
+
 }
 
 
@@ -286,17 +395,69 @@ int main() {
 	httplib::Server svr;
 
 	// This is where all the machines report to with a key 
-	svr.Get("/report", [](const httplib::Request &, httplib::Response &res) {
+	svr.Post("/report", [](const httplib::Request& req, httplib::Response &res) {
 
-		// Get session ID from request	
-		res.set_content("Received report","text/plain");	
+		std::string token = "";
+		std::string hostname = "";
+		std::string unixtime = "";
+		std::string loadavg = "";
+		std::string ramperc = "";
+
+		// Check if token present in request
+		if (req.has_param("access_token") && 
+				req.has_param("host_name") &&
+				req.has_param("unix_time") &&
+				req.has_param("load_avg") &&
+				req.has_param("ram_perc") ) {
+		
+			token = req.get_param_value("access_token");
+			hostname = req.get_param_value("host_name");
+			unixtime = req.get_param_value("unix_time");
+			loadavg = req.get_param_value("load_avg");
+			ramperc = req.get_param_value("ram_perc");
+
+		// Throw error on client side
+		} else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Token or hostname doesn't exist" << std::endl;}
+
 
 		// Validate session ID(check if its in db)
+		if (is_session_already_present(token) == true) {
+	
 			// Insert data for this machine for this session ID
+			if ( insert_entry(token, 
+					hostname,
+					unixtime,
+					loadavg,
+					ramperc) == true) {
+				
+				res.set_content("{'type':{'Success'}}","text/json");
 		
+			}	
 
-		// Return success message to user
+		} else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Unable to insert to db" << std::endl;}
+
+
 			
+	});
+
+
+	// Remove a session from the list
+	svr.Get("/list-sessions", [](const httplib::Request &, httplib::Response &res) {
+	
+		std:: cout << "Listing sessions..\n"; 	
+		std::vector<std::string> tables = {};
+		if (list_tables(tables) == false) res.set_content("{'type':{'Success'}}","text/json");
+		else  res.set_content("{'type':{'Error'}}","text/json");
+
+		// Placeholder for JSON reply
+		nlohmann::json response;
+		
+		// Convert to JSON, then serialize in in reply
+		ConvertToJson(tables, response);	
+		res.set_content(response.dump(), "text/json");
+
+
+
 	});
 
 	// Remove a session from the list
@@ -311,31 +472,55 @@ int main() {
 	});
 
 	// Serve data from the database for a hostname for this session
-	svr.Post("/fetch", [](const httplib::Request &, httplib::Response &res) {
-	  
+	svr.Post("/fetch", [](const httplib::Request& req, httplib::Response &res) {
+
+		std::string token = "";
+		std::string hostname = "";
+
+		// Check if token present in request
+		if (req.has_param("access_token") && req.has_param("host_name")) {
 		
-		std::string command = "SELECT name FROM sqlite_schema WHERE type='table' ORDER by name";
-	
-		// Get session ID from request	
-		res.set_content("Received report","text/plain");	
+			token = req.get_param_value("access_token");
+			hostname = req.get_param_value("host_name");
+
+		// Throw error on client side
+		} else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Token or hostname doesn't exist" << std::endl;}
 
 		// Validate session ID(check if its in db)
+		if (is_session_already_present(token) == true){
 	
-		// Get requested time period
 
-		// Fetch data for machines under for this session ID
-		// in requested time-frame
+			// Fetch data for machines under for this session ID
+			std::unordered_multimap<std::string,std::string>* results;
+			if (fetch_latest(results, token, hostname) == true) {
+			
+				// Placeholder for JSON reply
+				nlohmann::json response;
 
-		// Return data to user
-	
+				// Convert to JSON, then serialize in in reply
+				ConvertMmapToJson(*results, response);	
+
+
+				std::cout << "Fetch successful" << std::endl;
+				for (auto& thisval : *results) {
+				
+					std::cout << thisval.second << std::endl;
+				
+				}
+
+
+				res.set_content(response.dump(), "text/json");
+			} 
+		
+		} else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Token or hostname doesn't exist" << std::endl;}
 
 
 	});
 
 	// Register a new session on the website by the user(returns session key to user that they can
-	// use to publish data
-	svr.Get("/reg", [](const httplib::Request &, httplib::Response &res) {
- 
+	// use to publish datasvr.Get("/reg", [](const httplib::Request &, httplib::Response &res) {
+	svr.Get("/gentoken", [](const httplib::Request &, httplib::Response &res) {
+		
 		// Generate unique session key that does not yet exist among tables	
 		std::string token="";
 		generate_session_token(token);
@@ -345,19 +530,44 @@ int main() {
 
 	});
 
+	svr.Post("/reg", [](const httplib::Request &req, httplib::Response &res) {
+		
+		std::string token = "";
 
+		// Check if token present in request
+		if (req.has_param("access_token")) {
+		
+			token = req.get_param_value("access_token");
+
+		// Throw error on client side
+		} else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Token Doesn't exist" << std::endl;}
+	
+		// Register new session and return token to client
+		if (session_init(token) == true) {res.set_content("{'type':{'Success'}}", "text/json");std::cout << "added token" << std::endl;}
+		else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Unable to add token" << std::endl;}
+
+
+	});
+
+	
 
 	// List all the machine names available
-	svr.Post("/list", [](const httplib::Request &, httplib::Response &res) {
+	svr.Post("/list", [](const httplib::Request& req, httplib::Response &res) {
 
-		std::string sess_name = "test_session";
-		// Get session ID from request
+		std::string token = "";
+		
+		// Check if token present in request
+		if (req.has_param("access_token")) {
+		
+			token = req.get_param_value("access_token");
+
+		// Throw error on client side
+		} else {res.set_content("{'type':{'Error'}}","text/json");std::cout << "Token Doesn't exist" << std::endl;}
 
 
 		// Get machine names for this session
 		std::vector<std::string> hosts = {};
-		std::string session_token = "test_session";
-		list_hosts(hosts, session_token);
+		list_hosts(hosts, token);
 
 		// Placeholder for JSON reply
 		nlohmann::json response;
