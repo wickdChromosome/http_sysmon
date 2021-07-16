@@ -347,7 +347,7 @@ void list_hosts(std::vector<std::string>& hosts, std::string& session_token) {
 bool fetch_latest(std::unordered_multimap<std::string,std::string>* results, std::string& session_token, std::string& hostname) {
 
 	std::string command = "SELECT * FROM '" + session_token + "' WHERE HOSTNAME='" + hostname + "' LIMIT 1;";
-	results = new std::unordered_multimap<std::string,std::string>;	
+
 	
 	if (sqlite_select_exec( results, command) == true) {
 	
@@ -488,26 +488,18 @@ int main() {
 
 		// Validate session ID(check if its in db)
 		if (is_session_already_present(token) == true){
-	
 
 			// Fetch data for machines under for this session ID
 			std::unordered_multimap<std::string,std::string>* results;
+			results = new std::unordered_multimap<std::string,std::string>;	
+
 			if (fetch_latest(results, token, hostname) == true) {
-			
+		
 				// Placeholder for JSON reply
 				nlohmann::json response;
 
 				// Convert to JSON, then serialize in in reply
-				ConvertMmapToJson(*results, response);	
-
-
-				std::cout << "Fetch successful" << std::endl;
-				for (auto& thisval : *results) {
-				
-					std::cout << thisval.second << std::endl;
-				
-				}
-
+				ConvertMmapToJson(results_deref, response);	
 
 				res.set_content(response.dump(), "text/json");
 			} 
