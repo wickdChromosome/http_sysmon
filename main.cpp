@@ -64,7 +64,7 @@ bool sqlite_select_exec(std::unordered_multimap<std::string,std::string>* result
 	int rc;
 	bool status = false;
 
-	rc = sqlite3_open("test.db", &db);
+	rc = sqlite3_open("file::memory:", &db);
 
 	if( rc ) {
 	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
@@ -105,7 +105,7 @@ bool sqlite_exec(std::string& command) {
 	char *zErrMsg = 0;
 	int rc;
 
-	rc = sqlite3_open("test.db", &db);
+	rc = sqlite3_open("file::memory:", &db);
 
 	if( rc ) {
 	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
@@ -346,7 +346,7 @@ void list_hosts(std::vector<std::string>& hosts, std::string& session_token) {
 
 bool fetch_latest(std::unordered_multimap<std::string,std::string>* results, std::string& session_token, std::string& hostname) {
 
-	std::string command = "SELECT * FROM '" + session_token + "' WHERE HOSTNAME='" + hostname + "' LIMIT 1;";
+	std::string command = "SELECT HOSTNAME,LOAD_AVG,RAM_PERC,MAX(UNIX_TIME) FROM '" + session_token + "' WHERE HOSTNAME='" + hostname + "' LIMIT 1;";
 
 	
 	if (sqlite_select_exec( results, command) == true) {
@@ -495,6 +495,7 @@ int main() {
 
 			if (fetch_latest(results, token, hostname) == true) {
 		
+				std::unordered_multimap<std::string,std::string> results_deref = *results;
 				// Placeholder for JSON reply
 				nlohmann::json response;
 
