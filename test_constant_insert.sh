@@ -3,7 +3,7 @@ token='fa37JncCHryDsbzayy4cBWDxS22JjzhM'
 for i in $(seq 36000 72000); do 
 
 
-	host_name='bencepc'
+	host_name='pejlab'
 	unix_time=$(date +%s)
 	load_avg=$(cut -d ' ' -f2 /proc/loadavg)
 	ram_perc=$(free | grep Mem | awk '{print $3/$2 * 100.0}')

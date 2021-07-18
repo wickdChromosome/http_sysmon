@@ -14,218 +14,24 @@
 
 	<body>
 
-		<h1> Generated token: <p id="token_placeholder"></p></h1>
+		<h1> Generated token: <p id="user_token"></p></h1>
 
 		<h1> Click here to register a new session with a new token </h1>
-		<button onclick="generate_token()">Click me</button>
-
-		<h1> Click here to start a new monitoring session </h1>
-		<button onclick="start_monitoring('aiRrV41mtzxlYvKWrO72tK0LK0e1zLOZ')">Click me</button>
-
-		<select id="sel_depart">
-	   	<option value="0">- Select -</option>
-		</select>
-
-		<div id="machine_charts">
-			<p>Available machines: <p id="machines"></p></p>
-
-			<div style="background:'blue';width:95%;" class="container">
-				<div class="row">
-			<div style="width:50%" class="col-md">
-			<canvas id="load-chart" ></canvas>
-			</div>
-
-			<div style="width:50%" class="col-md">
-			<canvas id="ram-chart" ></canvas>
-			</div>
-			
-				</div>
-
-			</div>
-
-		</div>
-
-		<script>
-
-		load_ctx = new Chart(document.getElementById("load-chart"), {
-		  type: 'line',
-		  data: {
-		    labels: [],
-		    datasets: [{ 
-			data: [],
-			label: "5 min load avg",
-			borderColor: "#3e95cd",
-			fill: false
-		      }, 		    ]
-		  },
-		  options: {
-
-		scales: {
-			yAxes: [{
-			    display: true,
-			    ticks: {
-				suggestedMin: 0,    // minimum will be 0, unless there is a lower value.
-			    }
-			}]
-		    },
-		    title: {
-		      display: false,
-		      text: ''
-		    }
-		  }
-		});
-
-	
-		ram_ctx = new Chart(document.getElementById("ram-chart"), {
-		  type: 'line',
-		  data: {
-		    labels: [],
-		    datasets: [{ 
-			data: [],
-			label: "% ram in use",
-			borderColor: "indianred",
-			fill: false
-		      }, 		    ]
-		  },
-		  options: {
-
-	scales: {
-		yAxes: [{
-		    display: true,
-		    ticks: {
-			suggestedMin: 0,    // minimum will be 0, unless there is a lower value.
-			suggestedMax: 100,    // minimum will be 0, unless there is a lower value.
-		    }
-		}]
-	    },
-
-		title: {
-		      display: false,
-		      text: ''
-		    }
-		  }
-		});
-
-		function addData(chart, label, data) {
-
-		    if (chart.data.labels.length > 60) {
-
-			chart.data.labels.shift();
-
-
-		    }
-
-		    chart.data.labels.push(label);
-		    chart.data.datasets.forEach((dataset) => {
-
-			    if (dataset.data.length > 60) {
-
-				dataset.data.shift();
-
-
-			    }
-
-			dataset.data.push(data);
-		    });
-		    chart.update();
-		}
-
-
-
-
-		function fetch_data(load_ctx, ram_ctx) {
-
-			var lastupdated = 0; // unix time for when it was last updated
-			var token = "fa37JncCHryDsbzayy4cBWDxS22JjzhM";
-			var hostname = "bencepc";
-			var interval = 5000;  // 1000 = 1 second, 3000 = 3 seconds
-			function doAjax() {
-			    $.ajax({
-				    type: 'POST',
-				    url: 'fetch',
-				    data: {
-				        access_token:token,
-				        host_name:hostname
-				    },
-				    dataType: 'json',
-				    success: function (data) {
-					    
-					console.log(data);
-					var unix_time = parseInt(data["MAX(UNIX_TIME)"]);
-					if (lastupdated < unix_time) {
-
-						var loadavg = parseFloat(data["LOAD_AVG"]);
-						var ramperc = parseFloat(data["RAM_PERC"]);
-						const date = new Date(unix_time*1000);
-						//const datestring = date.toLocaleDateString("en-US");
-						const timestring = date.toLocaleTimeString("en-US");
-						
-						addData(load_ctx, timestring, loadavg);
-						addData(ram_ctx, timestring, ramperc);
-
-						lastupdated = unix_time
-					}
-
-				    },
-						  
-				    complete: function (data) {
-					    // Schedule the next
-					    setTimeout(doAjax, interval);
-				    }
-			    });
-			} setTimeout(doAjax, interval);	
-
-
-		}
-
-
-
-
-		fetch_data(load_ctx, ram_ctx);
-
-
-		</script>
+		<button onclick="generate_token()">Get token</button>
+		<button onclick="redirect_to_monitoring()">Watch machines</button>
 	</body>
 
 	<script>
 
+		function redirect_to_monitoring() {
 
 
+			let token = document.getElementById("user_token").innerHTML;
+			
 
 
-		function start_monitoring(token) {
-
-			var prev_machine_list = [];
-			var current_charts_list = {};
-
-			var token = "aiRrV41mtzxlYvKWrO72tK0LK0e1zLOZ";
-			var interval = 3000;  // 1000 = 1 second, 3000 = 3 seconds
-			function doAjax() {
-			    $.ajax({
-				    type: 'POST',
-				    url: 'list',
-				    data: {
-				        access_token:token
-				    },
-				    dataType: 'json',
-				    success: function (data) {
-					    
-				    	document.getElementById("machines").innerHTML = data;     
-					console.log(data);
-					watch_charts(current_charts_list, data)
-
-				    },
-						  
-				    complete: function (data) {
-					    // Schedule the next
-					    setTimeout(doAjax, interval);
-				    }
-			    });
-			} setTimeout(doAjax, interval);	
 
 		}
-
-
 
 		function register_session(token) {
 		
@@ -253,7 +59,7 @@
 				type: 'get',
 				success: function (data) {
 					console.log(data);
-					document.getElementById('token_placeholder').innerHTML = data;
+					document.getElementById('user_token').innerHTML = data;
 					register_session(data);
 				}
 			});
