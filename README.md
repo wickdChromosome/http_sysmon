@@ -2,7 +2,7 @@
 
 Example multiple system monitor using cpp-httplib, SQlite3 and a bit of front-end JS.
 
-![demo](demo.gif) / ! [](demo.gif)
+![demo](demo.gif)   [](demo.gif)
 
 To compile the project, you can do:
 ```
