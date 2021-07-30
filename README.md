@@ -1,10 +1,13 @@
-#TODO
+#HTTP Sysmon
 
-### FRONTEND
-- Make a page with JS to make a list call that gets run every 2 seconds to the db
-- Put a chart in there, modify the chart contents based on selection in prev point
+Example multiple system monitor using cpp-httplib, SQlite3 and a bit of front-end JS.
 
+![demo](demo.gif) / ! [](demo.gif)
 
-### BACKEND
-- Find a proper way to list existing session IDs   
+To compile the project, you can do:
+```
+mkdir build && cd build && conan install .. && make
+```
+
+As you can see, package management is done via conan. CMake(and a C++11 compiler, obviously) are also needed dependencies.
 

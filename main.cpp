@@ -64,7 +64,7 @@ bool sqlite_select_exec(std::unordered_multimap<std::string,std::string>* result
 	int rc;
 	bool status = false;
 
-	rc = sqlite3_open("file::memory:", &db);
+	rc = sqlite3_open("test.db", &db);
 
 	if( rc ) {
 	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
@@ -105,7 +105,7 @@ bool sqlite_exec(std::string& command) {
 	char *zErrMsg = 0;
 	int rc;
 
-	rc = sqlite3_open("file::memory:", &db);
+	rc = sqlite3_open("test.db", &db);
 
 	if( rc ) {
 	fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));

@@ -18,12 +18,11 @@
 		<form>
 		  <div class="input-group">
 		    <input type="text" class="form-control"
-			value="fa37JncCHryDsbzayy4cBWDxS22JjzhM" placeholder="Your token" id="copy-input">
+			value="" placeholder="Your token" id="copy-input">
 		    <span class="input-group-btn">
-		      <button class="btn btn-default" type="button" id="copy-button"
-			  data-toggle="tooltip" data-placement="button"
-			  title="Copy to Clipboard">
-			Copy
+		      <button class="btn btn-default" type="button" id="start-button"
+			  title="Start monitoring", onclick='start_monitoring()';>
+			Start Monitoring
 		      </button>
 		    </span>
 		  </div>
@@ -31,9 +30,19 @@
 		</div>
 
 		<select id="sel_mach">
-	   	<option value="0">- Select -</option>
+	   	<option >- Select -</option>
 		</select>
+
+
+		<button class="btn btn-default" type="button" id="start-button"
+			  title="Watch this machine", onclick='fetch_data()';>
+			Watch this machine
+		      </button>
+
+
 		<script>
+
+
 
 
 		</script>
@@ -60,42 +69,74 @@
 
 		<script>
 
+		// Starts looking in the DB for hostnames
+		function start_monitoring() {
+
+			var prev_machine_list = [];
+			var current_charts_list = {};
+
+			let token = document.getElementById("copy-input").value;
+			console.log(token)
+			if (token == "") {
+
+				return
+
+			}
+
+
+			var interval = 5000;  // 1000 = 1 second, 3000 = 3 seconds
+
+			function doAjax() {
+			    $.ajax({
+				    type: 'POST',
+				    url: 'list',
+				    data: {
+				        access_token:token
+				    },
+				    dataType: 'json',
+				    success: function (data) {
+					if (data == null) {
+					
+						return
+					
+					} 
+
+					// Update the list of machines
+					console.log(data);
+					var len = data.length;
+
+					$("#sel_mach").empty();
+					for( var i = 0; i<len; i++){
+						
+						var name = data[i];
+
+						$("#sel_mach").append("<option value='"+name+"'>"+name+"</option>");
+
+
+					}
+
+				    },
+						  
+				    complete: function (data) {
+					    // Schedule the next
+					    setTimeout(doAjax, interval);
+				    }
+			    });
+			} setTimeout(doAjax, interval);	
+
+		}
+
+
+
+
+
 		let chart_objs = [];
 
 		$( document ).ready(function() {
 
 				
-			start_monitoring();
+
 			 
-			// Initialize the tooltip.
-			  $('#copy-button').tooltip();
-
-			  // When the copy button is clicked, select the value of the text box, attempt
-			  // to execute the copy command, and trigger event to update tooltip message
-			  // to indicate whether the text was successfully copied.
-			  $('#copy-button').bind('click', function() {
-			    var input = document.querySelector('#copy-input');
-			    input.setSelectionRange(0, input.value.length + 1);
-			    try {
-			      var success = document.execCommand('copy');
-			      if (success) {
-				$('#copy-button').trigger('copied', ['Copied!']);
-			      } else {
-				$('#copy-button').trigger('copied', ['Copy with Ctrl-c']);
-			      }
-			    } catch (err) {
-			      $('#copy-button').trigger('copied', ['Copy with Ctrl-c']);
-			    }
-			  });
-
-			  // Handler for updating the tooltip message.
-			  $('#copy-button').bind('copied', function(event, message) {
-			    $(this).attr('title', message)
-				.tooltip('fixTitle')
-				.tooltip('show')
-				.attr('title', "Copy to Clipboard")
-				.tooltip('fixTitle');
-			  });
 
 			// CHARTING
 			load_ctx = new Chart(document.getElementById("load-chart"), {
@@ -160,23 +201,12 @@
 
 
 
-			chart_objs = [load_ctx, ram_ctx];
+			document.chart_objs = [load_ctx, ram_ctx];
 
 
-			fetch_data(chart_objs[0], chart_objs[1]);
+
 		});
 
-		document.getElementById("sel_mach").onchange = changeListener;
-		  
-		  function changeListener(){
-		  	var hostname = this.value
-		  	console.log(hostname);
-		
-			// Now start fetching data for this hostname
-			//fetch_data(chart_objs[0], chart_objs[1], hostname);
-
-
-		  }
 
 
 
@@ -225,16 +255,33 @@
 
 
 
-		function fetch_data(load_ctx, ram_ctx) {
+		function fetch_data() {
 
+			load_ctx = document.chart_objs[0];
+			ram_ctx = document.chart_objs[1];
+			hostname = "test3";
+
+
+			if (hostname == "") {
+			
+				return;
+			}
+
+			console.log("fetching..");
+
+			var token = document.getElementById("copy-input").value;
 			var lastupdated = 0; // unix time for when it was last updated
-			var token = "fa37JncCHryDsbzayy4cBWDxS22JjzhM";
-			var hostname = "";
-			var current_selection = "";
 			var interval = 5000;  // 1000 = 1 second, 3000 = 3 seconds
+			var current_selection = document.getElementById("sel_mach").value;
+
+			console.log(token);
+			console.log(hostname[0]);
+			console.log(current_selection[0]);
+			
 			function doAjax() {
 
-				current_selection = document.getElementById("sel_mach").value;
+
+				console.log(current_selection)
 				if (current_selection == "") {
 
 					return;
@@ -246,7 +293,7 @@
 				    url: 'fetch',
 				    data: {
 				        access_token:token,
-				        host_name:hostname
+				        host_name:current_selection
 				    },
 				    dataType: 'json',
 				    success: function (data) {
@@ -263,7 +310,6 @@
 					console.log(data);
 					var unix_time = parseInt(data["MAX(UNIX_TIME)"]);
 					if (lastupdated < unix_time) {
-
 
 
 						var loadavg = parseFloat(data["LOAD_AVG"]);
@@ -303,57 +349,6 @@
 
 
 
-
-
-		function start_monitoring() {
-
-			var prev_machine_list = [];
-			var current_charts_list = {};
-
-			let token = document.getElementById("copy-input").innerHTML;
-			if (token == "") {
-
-				// Test token
-				token = "fa37JncCHryDsbzayy4cBWDxS22JjzhM";
-
-			}
-
-
-			var interval = 5000;  // 1000 = 1 second, 3000 = 3 seconds
-
-			function doAjax() {
-			    $.ajax({
-				    type: 'POST',
-				    url: 'list',
-				    data: {
-				        access_token:token
-				    },
-				    dataType: 'json',
-				    success: function (data) {
-	
-					// Update the list of machines
-					console.log(data);
-					var len = data.length;
-
-					$("#sel_mach").empty();
-					for( var i = 0; i<len; i++){
-						
-						var name = data[i];
-
-						$("#sel_mach").append("<option value='"+name+"'>"+name+"</option>");
-
-					}
-
-				    },
-						  
-				    complete: function (data) {
-					    // Schedule the next
-					    setTimeout(doAjax, interval);
-				    }
-			    });
-			} setTimeout(doAjax, interval);	
-
-		}
 
 
 		function register_session(token) {

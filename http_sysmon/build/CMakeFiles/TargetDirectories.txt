@@ -1,3 +1,0 @@
-/home/bkotis/Documents/http_sysmon/build/CMakeFiles/rebuild_cache.dir
-/home/bkotis/Documents/http_sysmon/build/CMakeFiles/http_sysmon.dir
-/home/bkotis/Documents/http_sysmon/build/CMakeFiles/edit_cache.dir
