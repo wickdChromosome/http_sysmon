@@ -4,10 +4,15 @@ Example multiple system monitor using cpp-httplib, SQlite3 and a bit of front-en
 
 ![demo](demo.gif)   [](demo.gif)
 
-To compile the project, you can do:
+The project is developed inside a container. To build the container, you can do
 ```
-mkdir build && cd build && conan install .. && make
+make build
 ```
-
-As you can see, package management is done via conan. CMake(and a C++11 compiler, obviously) are also needed dependencies.
-
+To compile the project inside the container, do
+```
+make compile
+```
+Or to see all the options, do
+```
+make
+```
